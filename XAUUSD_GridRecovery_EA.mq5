@@ -60,7 +60,7 @@ struct DailyStats
 // INPUT PARAMETERS - ENTRY CONFIGURATION
 //+------------------------------------------------------------------+
 
-group "==== ENTRY CONFIGURATION ===="
+//==== ENTRY CONFIGURATION ====
 input double   InpEMA_Fast_Period    = 12;           // Fast EMA Period
 input double   InpEMA_Slow_Period    = 26;           // Slow EMA Period
 input int      InpRSI_Period         = 14;           // RSI Period
@@ -73,7 +73,7 @@ input int      InpBreakoutPeriod     = 10;           // Breakout Period (bars)
 // INPUT PARAMETERS - RISK & POSITION SIZING
 //+------------------------------------------------------------------+
 
-group "==== RISK & POSITION SIZING ===="
+//==== RISK & POSITION SIZING ====
 input ENUM_POSITION_MODE InpPositionMode = MODE_PERCENTAGE_RISK;  // Position Mode
 input double   InpFixedLotSize       = 0.1;          // Fixed Lot Size (if MODE_FIXED_LOT)
 input double   InpRiskPercent         = 0.5;          // Risk % per Initial Basket (if MODE_PERCENTAGE_RISK)
@@ -85,7 +85,7 @@ input double   InpMaxTotalExposure    = 2.0;          // Max Total Lot Exposure 
 // INPUT PARAMETERS - GRID & RECOVERY
 //+------------------------------------------------------------------+
 
-group "==== GRID & RECOVERY ===="
+//==== GRID & RECOVERY ====
 input int      InpMaxGridLevels      = 3;            // Maximum Grid Levels
 input double   InpGridSpacing        = 50;           // Grid Spacing (Points)
 input double   InpLotMultiplier      = 1.25;         // Lot Multiplier (Max 2.0)
@@ -98,7 +98,7 @@ input bool     InpRecoveryEnabled    = true;         // Enable Grid Recovery
 // INPUT PARAMETERS - ACCOUNT PROTECTION
 //+------------------------------------------------------------------+
 
-group "==== ACCOUNT PROTECTION ===="
+//==== ACCOUNT PROTECTION ====
 input double   InpDailyLossPercent   = 2.0;          // Daily Loss Limit %
 input double   InpBasketMaxLoss      = 1.0;          // Max Basket Loss %
 input double   InpMaxDrawdownPercent = 5.0;          // Max Drawdown % (Shutdown)
@@ -110,7 +110,7 @@ input int      InpMaxTradesPerDirection = 3;        // Max Trades Per Direction
 // INPUT PARAMETERS - SESSION & FILTER
 //+------------------------------------------------------------------+
 
-group "==== SESSION & FILTER ===="
+//==== SESSION & FILTER ====
 input bool     InpEnableSessionFilter = true;        // Enable Session Filter
 input int      InpSessionStartHour   = 14;           // Session Start (server time)
 input int      InpSessionEndHour     = 22;           // Session End (server time)
@@ -121,7 +121,7 @@ input int      InpCooldownBars       = 5;            // Cooldown (bars between t
 // INPUT PARAMETERS - BREAK-EVEN & TRAILING
 //+------------------------------------------------------------------+
 
-group "==== BREAK-EVEN & TRAILING ===="
+//==== BREAK-EVEN & TRAILING ====
 input bool     InpUseBreakEven       = true;         // Use Break-Even
 input int      InpBreakEvenPoints    = 50;           // Break-Even Trigger (Points)
 input bool     InpUseTrailingStop    = true;         // Use Trailing Stop
@@ -131,7 +131,7 @@ input int      InpTrailingStopPoints = 30;           // Trailing Stop Distance (
 // INPUT PARAMETERS - GENERAL
 //+------------------------------------------------------------------+
 
-group "==== GENERAL ===="
+//==== GENERAL ====
 input int      InpMagicNumber        = 123456789;    // Magic Number
 input string   InpTradeComment       = "GridRecoveryEA"; // Trade Comment
 input bool     InpEAEnabled          = true;         // EA Enabled
