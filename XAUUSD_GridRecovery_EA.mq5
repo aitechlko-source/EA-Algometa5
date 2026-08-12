@@ -445,14 +445,17 @@ void ProcessBuySignal()
 
    if(trade.Buy(lotSize, _Symbol, Ask, StopLoss, TakeProfit, InpTradeComment))
    {
-      LogMessage(2, "BUY Order Placed | Lot: " + DoubleToString(lotSize, 2) + 
-                    " | Entry: " + DoubleToString(Ask, symbolInfo.Digits()) + 
-                    " | SL: " + DoubleToString(StopLoss, symbolInfo.Digits()) +
-                    " | TP: " + DoubleToString(TakeProfit, symbolInfo.Digits()));
+      LogMessage(2, StringFormat(
+                    "BUY Order Placed | Lot: %s | Entry: %s | SL: %s | TP: %s",
+                    DoubleToString(lotSize, 2),
+                    DoubleToString(Ask, symbolInfo.Digits()),
+                    DoubleToString(StopLoss, symbolInfo.Digits()),
+                    DoubleToString(TakeProfit, symbolInfo.Digits())
+                 ));
    }
    else
    {
-      LogMessage(1, "BUY Order Failed - Error: " + IntegerToString(GetLastError()));
+      LogMessage(1, StringFormat("BUY Order Failed - Error: %d", GetLastError()));
    }
 }
 
@@ -502,14 +505,17 @@ void ProcessSellSignal()
 
    if(trade.Sell(lotSize, _Symbol, Bid, StopLoss, TakeProfit, InpTradeComment))
    {
-      LogMessage(2, "SELL Order Placed | Lot: " + DoubleToString(lotSize, 2) + 
-                    " | Entry: " + DoubleToString(Bid, symbolInfo.Digits()) + 
-                    " | SL: " + DoubleToString(StopLoss, symbolInfo.Digits()) +
-                    " | TP: " + DoubleToString(TakeProfit, symbolInfo.Digits()));
+      LogMessage(2, StringFormat(
+                    "SELL Order Placed | Lot: %s | Entry: %s | SL: %s | TP: %s",
+                    DoubleToString(lotSize, 2),
+                    DoubleToString(Bid, symbolInfo.Digits()),
+                    DoubleToString(StopLoss, symbolInfo.Digits()),
+                    DoubleToString(TakeProfit, symbolInfo.Digits())
+                 ));
    }
    else
    {
-      LogMessage(1, "SELL Order Failed - Error: " + IntegerToString(GetLastError()));
+      LogMessage(1, StringFormat("SELL Order Failed - Error: %d", GetLastError()));
    }
 }
 
