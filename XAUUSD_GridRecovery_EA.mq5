@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //|                     XAUUSD M5 Grid-Recovery EA v1.0               |
-//|                    Expert Advisor for MetaTrader 5                 |
+//|                    Expert Advisor for MetaTrader 5               |
 //|                                                                    |
 //|  Advanced Grid Recovery System with Risk Management               |
 //|  Target: XAUUSD M5 Timeframe                                      |
@@ -149,7 +149,6 @@ input int      InpJournalLevel       = 2;            // Journal Level (0=Silent,
 
 CTrade          trade;
 CPositionInfo   posInfo;
-CSymbolInfo     symbolInfo;
 CHistoryOrderInfo orderInfo;
 
 int             handleEMA_Fast = INVALID_HANDLE;
@@ -181,7 +180,7 @@ int OnInit()
    }
 
    // Validate symbol and timeframe
-   if(_Symbol != "XAUUSD" && _Symbol != "GOLD" && !StringFind(_Symbol, "XAUUSD") >= 0)
+   if(StringFind(_Symbol, "XAUUSD") < 0 && StringFind(_Symbol, "GOLD") < 0)
    {
       Print("ERROR: This EA is designed for XAUUSD only. Current symbol: ", _Symbol);
       return INIT_FAILED;
@@ -217,10 +216,10 @@ int OnInit()
    trade.SetDeviationInPoints(50);
    trade.LogLevel(LOG_LEVEL_NO);
 
-   // Initialize symbol info
-   if(!symbolInfo.Name(_Symbol))
+   // Basic symbol availability check via point value
+   if(SymbolInfoDouble(_Symbol, SYMBOL_POINT) == 0.0)
    {
-      Print("ERROR: Cannot initialize symbol");
+      Print("ERROR: Cannot initialize symbol (missing symbol info): ", _Symbol);
       return INIT_FAILED;
    }
 
@@ -251,12 +250,14 @@ int OnInit()
    dailyStats.dayStartEquity = accountStartEquity;
    dailyStats.dailyLossLimit = accountStartEquity * (InpDailyLossPercent / 100.0);
    dailyStats.lastResetTime = TimeCurrent();
+   dailyStats.dailyLoss = 0.0;
+   dailyStats.dailyLimitReached = false;
 
    Print("=== XAUUSD Grid-Recovery EA Initialized ===");
    Print("Symbol: ", _Symbol, " | Timeframe: ", _Period);
    Print("Position Mode: ", (InpPositionMode == MODE_FIXED_LOT ? "Fixed Lot" : "% Risk"));
    Print("Magic Number: ", InpMagicNumber);
-   Print("Daily Loss Limit: ", dailyStats.dailyLossLimit, " | Start Equity: ", accountStartEquity);
+   Print("Daily Loss Limit: ", DoubleToString(dailyStats.dailyLossLimit,2), " | Start Equity: ", DoubleToString(accountStartEquity,2));
 
    return INIT_SUCCEEDED;
 }
@@ -353,21 +354,30 @@ bool UpdateIndicators()
 
 ENUM_TRADING_DIRECTION GenerateEntrySignal()
 {
+   // Current bar index (use Time[0] for the latest bar time)
+   int currentBar = iBarShift(_Symbol, _Period, Time[0]);
+
    // Cooldown check
-   if(lastEntryBar == iBarShift(_Symbol, _Period, TimeCurrent()))
+   if(lastEntryBar == currentBar)
       return DIR_NEUTRAL;
 
-   int barsSinceLastEntry = iBarShift(_Symbol, _Period, TimeCurrent()) - lastEntryBar;
-   if(barsSinceLastEntry < InpCooldownBars)
+   if(lastEntryBar >= 0)
+   {
+      int barsSinceLastEntry = currentBar - lastEntryBar;
+      if(barsSinceLastEntry < InpCooldownBars)
+         return DIR_NEUTRAL;
+   }
+
+   // Trend check (EMA) - guard array access
+   if(ArraySize(bufferEMA_Fast) < 2 || ArraySize(bufferEMA_Slow) < 2 || ArraySize(bufferRSI) < 1)
       return DIR_NEUTRAL;
 
-   // Trend check (EMA)
-   bool trendUp = bufferEMA_Fast[0] > bufferEMA_Slow[0] && bufferEMA_Fast[1] <= bufferEMA_Slow[1];
-   bool trendDown = bufferEMA_Fast[0] < bufferEMA_Slow[0] && bufferEMA_Fast[1] >= bufferEMA_Slow[1];
+   bool trendUp = (bufferEMA_Fast[0] > bufferEMA_Slow[0]) && (bufferEMA_Fast[1] <= bufferEMA_Slow[1]);
+   bool trendDown = (bufferEMA_Fast[0] < bufferEMA_Slow[0]) && (bufferEMA_Fast[1] >= bufferEMA_Slow[1]);
 
    // RSI confirmation
-   bool rsiConfirmBuy = bufferRSI[0] < InpRSI_Buy_Level && bufferRSI[0] > 30;
-   bool rsiConfirmSell = bufferRSI[0] > InpRSI_Sell_Level && bufferRSI[0] < 70;
+   bool rsiConfirmBuy = (bufferRSI[0] < InpRSI_Buy_Level) && (bufferRSI[0] > 30);
+   bool rsiConfirmSell = (bufferRSI[0] > InpRSI_Sell_Level) && (bufferRSI[0] < 70);
 
    // Breakout confirmation (optional)
    bool breakoutBuy = true;
@@ -375,24 +385,34 @@ ENUM_TRADING_DIRECTION GenerateEntrySignal()
 
    if(InpUseBreakout)
    {
-      double highBreakout = iHigh(_Symbol, _Period, iHighest(_Symbol, _Period, MODE_HIGH, InpBreakoutPeriod, 1));
-      double lowBreakout = iLow(_Symbol, _Period, iLowest(_Symbol, _Period, MODE_LOW, InpBreakoutPeriod, 1));
+      double highBreakout = -DBL_MAX;
+      double lowBreakout = DBL_MAX;
+      int limit = MathMax(1, InpBreakoutPeriod);
 
-      breakoutBuy = (Close[0] > highBreakout);
-      breakoutSell = (Close[0] < lowBreakout);
+      for(int i = 1; i <= limit; i++)
+      {
+         double h = iHigh(_Symbol, _Period, i);
+         double l = iLow(_Symbol, _Period, i);
+         if(h > highBreakout) highBreakout = h;
+         if(l < lowBreakout)  lowBreakout = l;
+      }
+
+      double currentClose = iClose(_Symbol, _Period, 0);
+      breakoutBuy = (currentClose > highBreakout);
+      breakoutSell = (currentClose < lowBreakout);
    }
 
    // BUY Signal
    if(trendUp && rsiConfirmBuy && breakoutBuy)
    {
-      lastEntryBar = iBarShift(_Symbol, _Period, TimeCurrent());
+      lastEntryBar = currentBar;
       return DIR_BUY;
    }
 
    // SELL Signal
    if(trendDown && rsiConfirmSell && breakoutSell)
    {
-      lastEntryBar = iBarShift(_Symbol, _Period, TimeCurrent());
+      lastEntryBar = currentBar;
       return DIR_SELL;
    }
 
@@ -440,17 +460,18 @@ void ProcessBuySignal()
    }
 
    double Ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   double StopLoss = Ask - (InpStopLossPoints * symbolInfo.Point());
-   double TakeProfit = Ask + (InpTakeProfitPoints * symbolInfo.Point());
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   double StopLoss = Ask - (InpStopLossPoints * point);
+   double TakeProfit = Ask + (InpTakeProfitPoints * point);
 
    if(trade.Buy(lotSize, _Symbol, Ask, StopLoss, TakeProfit, InpTradeComment))
    {
       LogMessage(2, StringFormat(
                     "BUY Order Placed | Lot: %s | Entry: %s | SL: %s | TP: %s",
                     DoubleToString(lotSize, 2),
-                    DoubleToString(Ask, symbolInfo.Digits()),
-                    DoubleToString(StopLoss, symbolInfo.Digits()),
-                    DoubleToString(TakeProfit, symbolInfo.Digits())
+                    DoubleToString(Ask, (int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS)),
+                    DoubleToString(StopLoss, (int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS)),
+                    DoubleToString(TakeProfit, (int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS))
                  ));
    }
    else
@@ -500,17 +521,18 @@ void ProcessSellSignal()
    }
 
    double Bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double StopLoss = Bid + (InpStopLossPoints * symbolInfo.Point());
-   double TakeProfit = Bid - (InpTakeProfitPoints * symbolInfo.Point());
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   double StopLoss = Bid + (InpStopLossPoints * point);
+   double TakeProfit = Bid - (InpTakeProfitPoints * point);
 
    if(trade.Sell(lotSize, _Symbol, Bid, StopLoss, TakeProfit, InpTradeComment))
    {
       LogMessage(2, StringFormat(
                     "SELL Order Placed | Lot: %s | Entry: %s | SL: %s | TP: %s",
                     DoubleToString(lotSize, 2),
-                    DoubleToString(Bid, symbolInfo.Digits()),
-                    DoubleToString(StopLoss, symbolInfo.Digits()),
-                    DoubleToString(TakeProfit, symbolInfo.Digits())
+                    DoubleToString(Bid, (int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS)),
+                    DoubleToString(StopLoss, (int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS)),
+                    DoubleToString(TakeProfit, (int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS))
                  ));
    }
    else
@@ -552,7 +574,8 @@ void ApplyBreakEven(ulong ticket)
    if(!posInfo.SelectByTicket(ticket)) return;
 
    double currentProfit = posInfo.Profit();
-   double profitTrigger = (InpBreakEvenPoints * symbolInfo.Point()) * posInfo.Volume();
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   double profitTrigger = (InpBreakEvenPoints * point) * posInfo.Volume();
 
    if(currentProfit > profitTrigger)
    {
@@ -583,10 +606,11 @@ void ApplyTrailingStop(ulong ticket)
    double currentSL = posInfo.StopLoss();
    double Ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double Bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
 
    if(posInfo.PositionType() == POSITION_TYPE_BUY)
    {
-      double newSL = Bid - (InpTrailingStopPoints * symbolInfo.Point());
+      double newSL = Bid - (InpTrailingStopPoints * point);
       if(newSL > currentSL)
       {
          trade.PositionModify(ticket, newSL, posInfo.TakeProfit());
@@ -594,8 +618,8 @@ void ApplyTrailingStop(ulong ticket)
    }
    else if(posInfo.PositionType() == POSITION_TYPE_SELL)
    {
-      double newSL = Ask + (InpTrailingStopPoints * symbolInfo.Point());
-      if(newSL < currentSL || currentSL == 0)
+      double newSL = Ask + (InpTrailingStopPoints * point);
+      if(newSL < currentSL || currentSL == 0.0)
       {
          trade.PositionModify(ticket, newSL, posInfo.TakeProfit());
       }
@@ -634,8 +658,9 @@ void UpdateProtectionStatus()
    if(dailyStats.dailyLoss >= dailyStats.dailyLossLimit)
    {
       dailyStats.dailyLimitReached = true;
-      LogMessage(1, "DAILY LOSS LIMIT REACHED: " + DoubleToString(dailyStats.dailyLoss, 2) + 
-                    " / " + DoubleToString(dailyStats.dailyLossLimit, 2));
+      LogMessage(1, StringFormat("DAILY LOSS LIMIT REACHED: %s / %s",
+                 DoubleToString(dailyStats.dailyLoss, 2),
+                 DoubleToString(dailyStats.dailyLossLimit, 2)));
    }
 
    // Check max drawdown
@@ -660,7 +685,7 @@ void UpdateProtectionStatus()
       dailyStats.dailyLoss = 0;
       dailyStats.dailyLimitReached = false;
       dailyStats.lastResetTime = TimeCurrent();
-      LogMessage(2, "Daily stats reset - New equity baseline: " + DoubleToString(currentEquity, 2));
+      LogMessage(2, StringFormat("Daily stats reset - New equity baseline: %s", DoubleToString(currentEquity, 2)));
    }
 }
 
@@ -679,12 +704,25 @@ double CalculateLotSize(ENUM_TRADING_DIRECTION direction)
    else if(InpPositionMode == MODE_PERCENTAGE_RISK)
    {
       double riskAmount = AccountInfoDouble(ACCOUNT_EQUITY) * (InpRiskPercent / 100.0);
-      double pointValue = symbolInfo.TickSize() * symbolInfo.TickValueProfit();
+      double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+      double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+      double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
       double riskInPoints = InpStopLossPoints;
 
-      if(riskInPoints > 0)
+      // Guard against zero tickValue
+      double pointValue = 0.0;
+      if(tickSize > 0.0 && tickValue > 0.0)
+         pointValue = tickSize != 0.0 ? (tickValue / tickSize) : (point * tickValue);
+
+      if(pointValue <= 0.0)
       {
-         lotSize = NormalizeDouble(riskAmount / (riskInPoints * pointValue), 2);
+         // Fallback: approximate using point
+         pointValue = point;
+      }
+
+      if(riskInPoints > 0 && pointValue > 0.0)
+      {
+         lotSize = riskAmount / (riskInPoints * pointValue);
       }
    }
 
@@ -693,7 +731,8 @@ double CalculateLotSize(ENUM_TRADING_DIRECTION direction)
       lotSize = InpMaxTotalExposure;
 
    // Validate minimum lot
-   if(lotSize < symbolInfo.LotsMin())
+   double lotMin = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   if(lotSize < lotMin)
       lotSize = 0;
 
    return NormalizeDouble(lotSize, 2);
@@ -780,7 +819,7 @@ bool IsWithinTradingSession()
    if(!InpEnableSessionFilter)
       return true;
 
-   int hour = Hour();
+   int hour = TimeHour(TimeCurrent());
    return (hour >= InpSessionStartHour && hour < InpSessionEndHour);
 }
 
@@ -793,7 +832,7 @@ bool IsSpreadAcceptable()
    if(!InpEnableSpreadFilter)
       return true;
 
-   long spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
+   long spread = (long)SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
    return (spread <= InpMaxSpreadPoints);
 }
 
