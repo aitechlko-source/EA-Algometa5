@@ -17,10 +17,18 @@
 #include <Trade\HistoryOrderInfo.mqh>
 
 // User-defined error codes
-#define ERR_USER_INVALID_HANDLE                            1
-#define ERR_USER_INVALID_BUFF_NUM                          2
-#define ERR_USER_ITEM_NOT_FOUND                            3
-#define ERR_USER_ARRAY_IS_EMPTY                            1000
+#ifndef ERR_USER_INVALID_HANDLE
+  #define ERR_USER_INVALID_HANDLE                            1
+#endif
+#ifndef ERR_USER_INVALID_BUFF_NUM
+  #define ERR_USER_INVALID_BUFF_NUM                          2
+#endif
+#ifndef ERR_USER_ITEM_NOT_FOUND
+  #define ERR_USER_ITEM_NOT_FOUND                            3
+#endif
+#ifndef ERR_USER_ARRAY_IS_EMPTY
+  #define ERR_USER_ARRAY_IS_EMPTY                            1000
+#endif
 
 //+------------------------------------------------------------------+
 // ENUMERATIONS & STRUCTURES
@@ -167,6 +175,11 @@ int             basketCounter = 0;
 double          accountStartEquity = 0;
 bool            protectionActive = false;
 
+// Runtime validated copies of read-only inputs
+double          ValidatedLotMultiplier = 0.0;
+double          ValidatedRiskPercent = 0.0;
+int             ValidatedMaxGridLevels = 0;
+
 //+------------------------------------------------------------------+
 // EXPERT ADVISOR INITIALIZATION
 //+------------------------------------------------------------------+
@@ -192,23 +205,26 @@ int OnInit()
       return INIT_FAILED;
    }
 
-   // Validate inputs
-   if(InpLotMultiplier > 2.0)
+   // Validate inputs but do NOT modify input constants - use validated runtime copies
+   ValidatedLotMultiplier = InpLotMultiplier;
+   if(ValidatedLotMultiplier > 2.0)
    {
       Print("WARNING: Lot multiplier capped at 2.0 for safety");
-      InpLotMultiplier = 2.0;
+      ValidatedLotMultiplier = 2.0;
    }
 
-   if(InpRiskPercent < 0.1 || InpRiskPercent > 5.0)
+   ValidatedRiskPercent = InpRiskPercent;
+   if(ValidatedRiskPercent < 0.1 || ValidatedRiskPercent > 5.0)
    {
       Print("WARNING: Risk % should be 0.1-5.0. Adjusting to 0.5");
-      InpRiskPercent = 0.5;
+      ValidatedRiskPercent = 0.5;
    }
 
-   if(InpMaxGridLevels < 1 || InpMaxGridLevels > 5)
+   ValidatedMaxGridLevels = InpMaxGridLevels;
+   if(ValidatedMaxGridLevels < 1 || ValidatedMaxGridLevels > 5)
    {
       Print("WARNING: Grid levels should be 1-5. Adjusting to 3");
-      InpMaxGridLevels = 3;
+      ValidatedMaxGridLevels = 3;
    }
 
    // Initialize trade object
@@ -354,8 +370,9 @@ bool UpdateIndicators()
 
 ENUM_TRADING_DIRECTION GenerateEntrySignal()
 {
-   // Current bar index (use Time[0] for the latest bar time)
-   int currentBar = iBarShift(_Symbol, _Period, Time[0]);
+   // Current bar index (use iTime for the latest bar time)
+   datetime currentBarTime = iTime(_Symbol, _Period, 0);
+   int currentBar = iBarShift(_Symbol, _Period, currentBarTime);
 
    // Cooldown check
    if(lastEntryBar == currentBar)
@@ -703,7 +720,7 @@ double CalculateLotSize(ENUM_TRADING_DIRECTION direction)
    }
    else if(InpPositionMode == MODE_PERCENTAGE_RISK)
    {
-      double riskAmount = AccountInfoDouble(ACCOUNT_EQUITY) * (InpRiskPercent / 100.0);
+      double riskAmount = AccountInfoDouble(ACCOUNT_EQUITY) * (ValidatedRiskPercent / 100.0);
       double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
       double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
       double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
@@ -819,7 +836,9 @@ bool IsWithinTradingSession()
    if(!InpEnableSessionFilter)
       return true;
 
-   int hour = TimeHour(TimeCurrent());
+   MqlDateTime tm;
+   TimeToStruct(TimeCurrent(), tm);
+   int hour = tm.hour;
    return (hour >= InpSessionStartHour && hour < InpSessionEndHour);
 }
 
