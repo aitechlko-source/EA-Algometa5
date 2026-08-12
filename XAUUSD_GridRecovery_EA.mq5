@@ -192,10 +192,26 @@ int OnInit()
       return INIT_SUCCEEDED;
    }
 
-   // Validate symbol and timeframe
-   if(StringFind(_Symbol, "XAUUSD") < 0 && StringFind(_Symbol, "GOLD") < 0)
+   // Tolerant symbol check with diagnostics
+   string upperSymbol = StringUpper(_Symbol);
+   bool isGoldSymbol = (StringFind(upperSymbol, "GOLD") >= 0) || 
+                       (StringFind(upperSymbol, "XAUUSD") >= 0) ||
+                       (StringFind(upperSymbol, "XAUUSD.") >= 0);
+
+   if(!isGoldSymbol)
    {
-      Print("ERROR: This EA is designed for XAUUSD only. Current symbol: ", _Symbol);
+      // Log diagnostics before failing
+      Print("============== SYMBOL VALIDATION DIAGNOSTICS ==============");
+      Print("Current Symbol: ", _Symbol);
+      Print("Symbol (uppercase): ", upperSymbol);
+      Print("Symbol Length: ", StringLen(_Symbol));
+      Print("Contains 'GOLD': ", (StringFind(upperSymbol, "GOLD") >= 0 ? "YES" : "NO"));
+      Print("Contains 'XAUUSD': ", (StringFind(upperSymbol, "XAUUSD") >= 0 ? "YES" : "NO"));
+      Print("First 10 chars: ", StringSubstr(_Symbol, 0, 10));
+      Print("Last 10 chars: ", StringSubstr(_Symbol, MathMax(0, StringLen(_Symbol) - 10)));
+      Print("WARNING: This EA is designed for XAUUSD / GOLD symbols only.");
+      Print("To proceed, update the symbol validation or disable this EA.");
+      Print("==============================================================");
       return INIT_FAILED;
    }
 
@@ -232,10 +248,19 @@ int OnInit()
    trade.SetDeviationInPoints(50);
    trade.LogLevel(LOG_LEVEL_NO);
 
-   // Basic symbol availability check via point value
-   if(SymbolInfoDouble(_Symbol, SYMBOL_POINT) == 0.0)
+   // Basic symbol availability check via point value and diagnostics
+   double symbolPoint = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   if(symbolPoint == 0.0)
    {
-      Print("ERROR: Cannot initialize symbol (missing symbol info): ", _Symbol);
+      Print("============== SYMBOL INFO DIAGNOSTICS ==============");
+      Print("Cannot retrieve symbol information for: ", _Symbol);
+      Print("SYMBOL_POINT: ", symbolPoint);
+      Print("SYMBOL_BID: ", SymbolInfoDouble(_Symbol, SYMBOL_BID));
+      Print("SYMBOL_ASK: ", SymbolInfoDouble(_Symbol, SYMBOL_ASK));
+      Print("SYMBOL_DIGITS: ", SymbolInfoInteger(_Symbol, SYMBOL_DIGITS));
+      Print("SYMBOL_TRADE_TICK_SIZE: ", SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE));
+      Print("ERROR: Symbol is not ready or does not exist on this broker.");
+      Print("======================================================");
       return INIT_FAILED;
    }
 
